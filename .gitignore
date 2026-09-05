@@ -1,0 +1,21 @@
+# Modelos e binários (pesados, cada um baixa/compila o seu)
+models/*.gguf
+models/*.bin
+llm/windows/*
+llm/linux/*
+!llm/windows/.gitkeep
+!llm/linux/.gitkeep
+
+# Histórico de scans — dados do computador de cada pessoa, não deve ser versionado
+scans/*.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Python portátil (se usado)
+python/libs/
+
+# Diversos
+.DS_Store
+Thumbs.db

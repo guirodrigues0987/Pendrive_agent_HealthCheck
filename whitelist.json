@@ -1,0 +1,19 @@
+{
+  "_comment": "Nomes (case-insensitive) de processos e itens de inicialização considerados normais/esperados. Edite livremente para o seu ambiente.",
+  "processes": [
+    "system", "system idle process", "registry", "smss.exe", "csrss.exe",
+    "wininit.exe", "winlogon.exe", "services.exe", "lsass.exe", "svchost.exe",
+    "explorer.exe", "dwm.exe", "fontdrvhost.exe", "sihost.exe", "taskhostw.exe",
+    "ctfmon.exe", "searchindexer.exe", "searchapp.exe", "shellexperiencehost.exe",
+    "runtimebroker.exe", "textinputhost.exe", "startmenuexperiencehost.exe",
+    "applicationframehost.exe", "systemsettings.exe", "widgets.exe",
+    "python.exe", "python3.exe", "pythonw.exe", "code.exe", "chrome.exe",
+    "msedge.exe", "firefox.exe", "powershell.exe", "pwsh.exe", "cmd.exe",
+    "conhost.exe", "windowsterminal.exe", "llama-server.exe", "node.exe",
+    "kthreadd", "systemd", "bash", "sshd", "cron", "rsyslogd"
+  ],
+  "startup_items": [
+    "onedrive", "security health", "windows security", "realtek",
+    "synaptics", "nvidia", "amd", "intel", "audio", "microsoft edge update"
+  ]
+}
