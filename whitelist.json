@@ -1,5 +1,5 @@
 {
-  "_comment": "Nomes (case-insensitive) de processos e itens de inicialização considerados normais/esperados. Edite livremente para o seu ambiente.",
+  "_comment": "Case-insensitive names of processes and startup items considered normal/expected. Edit freely for your environment.",
   "processes": [
     "system", "system idle process", "registry", "smss.exe", "csrss.exe",
     "wininit.exe", "winlogon.exe", "services.exe", "lsass.exe", "svchost.exe",

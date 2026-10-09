@@ -1,53 +1,53 @@
 """
-agent.py — Agente de scan do sistema, rodando 100% local a partir do pendrive.
+agent.py - System scan agent, running 100% locally from a USB drive.
 
-Funciona com qualquer servidor local que exponha API compatível com OpenAI:
-  - llama.cpp:  ./llama-server -m modelo.gguf -c 4096 --port 8080
-  - Ollama:     ollama serve   (porta padrão 11434, endpoint /v1/chat/completions)
+Works with any local server exposing an OpenAI-compatible API:
+  - llama.cpp:  ./llama-server -m model.gguf -c 4096 --port 8080
+  - Ollama:     ollama serve   (default port 11434, endpoint /v1/chat/completions)
 
-Uso:
+Usage:
     python agent.py
     python agent.py --host http://localhost:11434 --model llama3
 
 DESIGN NOTE:
-Modelos pequenos (7B-8B) rodando via llama.cpp costumam falhar no parsing de
-tool-calling quando tentam chamar várias ferramentas na mesma resposta (bug
-conhecido de "peg-native format" no llama-server). Como o scan sempre roda o
-mesmo conjunto fixo de ferramentas, não há necessidade de deixar o modelo
-"decidir" quais chamar — o Python roda todas diretamente, e o LLM entra só
-para interpretar os dados brutos e escrever o resumo final em português.
+Small models (7B-8B) running via llama.cpp often fail at tool-calling parsing
+when they try to call several tools in the same response (known "peg-native
+format" bug in llama-server). Since the scan always runs the same fixed set of
+tools, there is no need to let the model "decide" which to call - Python runs
+all of them directly, and the LLM is only used to interpret the raw data and
+write the final summary.
 
-Também mantém um histórico de scans (scans/) e compara com o anterior para
-destacar só o que MUDOU, além de aplicar uma whitelist (whitelist.json) para
-reduzir ruído de processos/itens já conhecidos como normais.
+It also keeps a scan history (scans/) and compares against the previous scan
+to highlight only what CHANGED, and applies a whitelist (whitelist.json) to
+reduce noise from processes/items already known to be normal.
 """
 
 import argparse
 import json
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 
-from tools import list_processes, list_network_connections, list_startup_items
-from history import load_latest_snapshot, save_snapshot, diff_snapshots
+from history import diff_snapshots, load_latest_snapshot, save_snapshot
+from tools import list_network_connections, list_processes, list_startup_items
 
-SYSTEM_PROMPT = """Você é um agente de segurança que analisa dados reais coletados de um
-computador (processos em execução, conexões de rede e itens de inicialização) e escreve
-um resumo em português para uma pessoa não técnica.
+SYSTEM_PROMPT = """You are a security agent that analyzes real data collected from a computer
+(running processes, network connections and startup items) and writes a summary in
+{language} for a non-technical person.
 
-Regras importantes:
-- Você NÃO é um antivírus e não reconhece assinaturas de malware conhecido. Não afirme
-  categoricamente que algo "é malware" ou "é um servidor de malware conhecido" — você não
-  tem base de dados de reputação. Diga no máximo que algo "merece verificação".
-- Itens marcados como "whitelisted": true já são conhecidos/esperados nesse tipo de
-  ambiente — não gaste tempo comentando sobre eles, a menos que algo neles pareça
-  claramente fora do padrão (ex: caminho de execução estranho para um programa comum).
-- Dê atenção especial à seção "O QUE MUDOU DESDE O ÚLTIMO SCAN" quando ela existir — é
-  o sinal mais forte de algo novo que vale investigar.
-- Baseie-se apenas nos dados fornecidos. Não invente processos, conexões ou programas
-  que não estejam na lista.
-- Se nada parecer suspeito, diga isso claramente — não invente problemas para parecer útil.
-- Seja direto e objetivo. Não repita a lista inteira de dados, só destaque o que importa.
+Important rules:
+- You are NOT an antivirus and do not recognize known malware signatures. Never state
+  categorically that something "is malware" or "is a known malware server" - you have no
+  reputation database. At most say that something "deserves a closer look".
+- Items marked "whitelisted": true are already known/expected in this kind of
+  environment - do not spend time commenting on them unless something about them looks
+  clearly out of the ordinary (e.g. a strange execution path for a common program).
+- Pay special attention to the "WHAT CHANGED SINCE THE LAST SCAN" section when it exists -
+  it is the strongest signal of something new worth investigating.
+- Rely only on the data provided. Do not invent processes, connections or programs that
+  are not in the list.
+- If nothing looks suspicious, say so clearly - do not invent problems to seem useful.
+- Be direct and concise. Do not repeat the whole data list, only highlight what matters.
 """
 
 
@@ -68,13 +68,13 @@ def call_llm(host, model, messages, timeout=1800):
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="ignore")
-        print(f"\n[ERRO] O servidor respondeu com erro HTTP {e.code}.")
-        print(f"Detalhe: {body[:500]}")
+        print(f"\n[ERROR] The server responded with HTTP error {e.code}.")
+        print(f"Details: {body[:500]}")
         sys.exit(1)
     except urllib.error.URLError as e:
-        print(f"\n[ERRO] Não consegui falar com o servidor LLM em {host}.")
-        print("Verifique se o llama.cpp server ou o Ollama estão rodando.")
-        print(f"Detalhe: {e}")
+        print(f"\n[ERROR] Could not reach the LLM server at {host}.")
+        print("Check that the llama.cpp server or Ollama is running.")
+        print(f"Details: {e}")
         sys.exit(1)
 
 
@@ -84,70 +84,81 @@ def _trim(data, max_chars=6000):
 
 def build_prompt(processes, connections, startup, diff):
     sections = [
-        f"PROCESSOS EM EXECUÇÃO (top 30 por uso de memória):\n{_trim(processes)}",
-        f"CONEXÕES DE REDE ATIVAS:\n{_trim(connections)}",
-        f"ITENS DE INICIALIZAÇÃO AUTOMÁTICA:\n{_trim(startup)}",
+        f"RUNNING PROCESSES (top 30 by memory usage):\n{_trim(processes)}",
+        f"ACTIVE NETWORK CONNECTIONS:\n{_trim(connections)}",
+        f"AUTOMATIC STARTUP ITEMS:\n{_trim(startup)}",
     ]
 
     if diff is not None:
-        mudou_algo = diff["new_processes"] or diff["new_remote_connections"] or diff["new_startup_items"]
-        if mudou_algo:
+        changed = diff["new_processes"] or diff["new_remote_connections"] or diff["new_startup_items"]
+        if changed:
             sections.append(
-                "O QUE MUDOU DESDE O ÚLTIMO SCAN (em relação a " + str(diff["previous_timestamp"]) + "):\n"
-                + json.dumps({
-                    "processos_novos": diff["new_processes"],
-                    "conexoes_remotas_novas": diff["new_remote_connections"],
-                    "itens_inicializacao_novos": diff["new_startup_items"],
-                }, ensure_ascii=False)
+                "WHAT CHANGED SINCE THE LAST SCAN (relative to "
+                + str(diff["previous_timestamp"])
+                + "):\n"
+                + json.dumps(
+                    {
+                        "new_processes": diff["new_processes"],
+                        "new_remote_connections": diff["new_remote_connections"],
+                        "new_startup_items": diff["new_startup_items"],
+                    },
+                    ensure_ascii=False,
+                )
             )
         else:
-            sections.append("O QUE MUDOU DESDE O ÚLTIMO SCAN: nada de novo em relação ao scan anterior.")
+            sections.append("WHAT CHANGED SINCE THE LAST SCAN: nothing new compared to the previous scan.")
     else:
-        sections.append("Este é o primeiro scan registrado — não há scan anterior para comparar.")
+        sections.append("This is the first recorded scan - there is no previous scan to compare against.")
 
     return "\n\n".join(sections)
 
 
-def run_agent(host, model):
-    print("Agente iniciado. Coletando dados do sistema...\n")
+def run_agent(host, model, language="English"):
+    print("Agent started. Collecting system data...\n")
 
-    print("  → coletando processos em execução...")
+    print("  -> collecting running processes...")
     processes = list_processes(limit=30)
-    print("  → coletando conexões de rede...")
+    print("  -> collecting network connections...")
     connections = list_network_connections()
-    print("  → coletando itens de inicialização...")
+    print("  -> collecting startup items...")
     startup = list_startup_items()
 
     previous = load_latest_snapshot()
     diff = diff_snapshots(previous, processes, connections, startup)
 
     snapshot_path = save_snapshot(processes, connections, startup)
-    print(f"  → snapshot salvo em: {snapshot_path}")
+    print(f"  -> snapshot saved at: {snapshot_path}")
 
     prompt_data = build_prompt(processes, connections, startup, diff)
 
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": (
-            "Aqui estão os dados coletados do meu computador. Analise e me diga se "
-            "tem alguma irregularidade:\n\n" + prompt_data
-        )},
+        {"role": "system", "content": SYSTEM_PROMPT.format(language=language)},
+        {
+            "role": "user",
+            "content": (
+                "Here is the data collected from my computer. Analyze it and tell me whether "
+                "there is anything irregular:\n\n" + prompt_data
+            ),
+        },
     ]
 
-    print("\nAnalisando com o modelo local (pode levar 1-3 minutos)...\n")
+    print("\nAnalyzing with the local model (may take 1-3 minutes)...\n")
     response = call_llm(host, model, messages)
     answer = response["choices"][0]["message"]["content"].strip()
 
     print("=" * 60)
-    print("RESUMO DO SCAN")
+    print("SCAN SUMMARY")
     print("=" * 60)
     print(answer)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Agente de scan do sistema (100% local).")
-    parser.add_argument("--host", default="http://localhost:8080", help="URL do servidor LLM local")
-    parser.add_argument("--model", default="local-model", help="Nome do modelo (Ollama exige o nome exato, ex: llama3)")
+    parser = argparse.ArgumentParser(description="System scan agent (100% local).")
+    parser.add_argument("--host", default="http://localhost:8080", help="URL of the local LLM server")
+    parser.add_argument(
+        "--model", default="local-model", help="Model name (Ollama requires the exact name, e.g. llama3)"
+    )
+    parser.add_argument("--language", default="English", help="Language of the final summary")
     args = parser.parse_args()
 
-    run_agent(args.host, args.model)
+    run_agent(args.host, args.model, args.language)
