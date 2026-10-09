@@ -1,11 +1,11 @@
 """
-history.py — Histórico de scans e comparação entre execuções.
+history.py - Scan history and comparison between runs.
 
-Cada scan é salvo como um snapshot JSON em scans/, com timestamp no nome.
-A cada nova execução, comparamos com o snapshot mais recente anterior para
-destacar SÓ o que mudou (processo novo, item de inicialização novo, conexão
-nova) — isso reduz muito o ruído e ajuda o LLM (e você) a focar no que
-realmente importa, em vez de reler a mesma lista gigante toda vez.
+Each scan is saved as a JSON snapshot in scans/, with a timestamp in the name.
+On every new run we compare against the most recent previous snapshot to
+highlight ONLY what changed (new process, new startup item, new connection).
+This greatly reduces noise and helps the LLM (and you) focus on what actually
+matters instead of re-reading the same huge list every time.
 """
 
 import json
@@ -20,7 +20,7 @@ def _ensure_dir():
 
 
 def list_snapshots():
-    """Retorna os caminhos dos snapshots salvos, em ordem cronológica."""
+    """Return the paths of saved snapshots, in chronological order."""
     _ensure_dir()
     files = [f for f in os.listdir(SCANS_DIR) if f.startswith("scan_") and f.endswith(".json")]
     files.sort()
@@ -28,16 +28,16 @@ def list_snapshots():
 
 
 def load_latest_snapshot():
-    """Carrega o snapshot mais recente salvo, ou None se não houver nenhum."""
+    """Load the most recent saved snapshot, or None if there is none."""
     snapshots = list_snapshots()
     if not snapshots:
         return None
-    with open(snapshots[-1], "r", encoding="utf-8") as f:
+    with open(snapshots[-1], encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_snapshot(processes, connections, startup_items):
-    """Salva um novo snapshot com timestamp e retorna o caminho do arquivo."""
+    """Save a new timestamped snapshot and return the file path."""
     _ensure_dir()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = os.path.join(SCANS_DIR, f"scan_{timestamp}.json")
@@ -53,7 +53,7 @@ def save_snapshot(processes, connections, startup_items):
 
 
 def _names(items, key="name"):
-    """Extrai um conjunto de nomes/identificadores de uma lista de dicts, ignorando entradas de erro."""
+    """Extract a set of names/identifiers from a list of dicts, ignoring error entries."""
     result = set()
     for item in items:
         if not isinstance(item, dict) or "error" in item:
@@ -66,9 +66,9 @@ def _names(items, key="name"):
 
 def diff_snapshots(previous, current_processes, current_connections, current_startup):
     """
-    Compara o snapshot anterior com os dados atuais e retorna um dict com o que
-    é NOVO em cada categoria (apareceu agora e não estava antes).
-    Se não houver snapshot anterior (primeiro scan), retorna None.
+    Compare the previous snapshot with the current data and return a dict with
+    what is NEW in each category (present now but not before).
+    If there is no previous snapshot (first scan), return None.
     """
     if previous is None:
         return None

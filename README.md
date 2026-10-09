@@ -1,15 +1,21 @@
-# Agente de Scan do Sistema — 100% local, rodando do pendrive
+# System Scan Agent - 100% local, runs from a USB drive
 
-Agente que usa um LLM local (sem internet) para analisar processos, conexões
-de rede e itens de inicialização do computador, e apontar o que parece
-suspeito. **Não substitui um antivírus** — é uma camada de triagem/leitura
-em linguagem natural sobre dados reais do sistema.
+[![CI](https://github.com/guirodrigues0987/Pendrive_agent_HealthCheck/actions/workflows/ci.yml/badge.svg)](https://github.com/guirodrigues0987/Pendrive_agent_HealthCheck/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Funciona em Windows e Linux a partir do mesmo pendrive.
+An agent that uses a local LLM (no internet) to analyze a computer's processes,
+network connections and startup items, and point out what looks suspicious.
+**It is not a replacement for antivirus software** - it is a triage layer that
+explains real system data in natural language.
+
+It works on Windows and Linux from the same USB drive.
+
+Architecture diagrams live in the companion repository
+[pendrive-agent-docs](https://github.com/guirodrigues0987/pendrive-agent-docs).
 
 ---
 
-## 1. Estrutura de pastas no pendrive
+## 1. Folder layout on the USB drive
 
 ```
 pendrive/
@@ -20,104 +26,120 @@ pendrive/
 ├── README.md
 ├── .gitignore
 ├── llm/
-│   ├── windows/          <- binário do llama.cpp p/ Windows (llama-server.exe)
-│   └── linux/            <- binário do llama.cpp p/ Linux (llama-server)
+│   ├── windows/          <- llama.cpp binary for Windows (llama-server.exe)
+│   └── linux/            <- llama.cpp binary for Linux (llama-server)
 ├── models/
-│   └── modelo.gguf       <- modelo quantizado (ex: Llama-3-8B-Instruct-Q4_K_M.gguf)
-├── scans/                <- histórico de scans (gerado automaticamente, não versionar)
+│   └── model.gguf        <- quantized model (e.g. Llama-3-8B-Instruct-Q4_K_M.gguf)
+├── scans/                <- scan history (generated automatically, do not version)
 └── python/
-    └── (opcional: Python portátil, ver seção 4)
+    └── (optional: portable Python, see section 4)
 ```
 
-## 2. Baixar o motor de inferência (llama.cpp)
+## 2. Download the inference engine (llama.cpp)
 
-Baixe os binários pré-compilados direto do repositório oficial:
+Download the prebuilt binaries from the official repository:
 https://github.com/ggml-org/llama.cpp/releases
 
-- Windows: pegue o `.zip` com `win-x64` no nome, extraia em `llm/windows/`
-- Linux: pegue o `.zip` com `ubuntu-x64` (ou compile na sua máquina), extraia em `llm/linux/`
+- Windows: get the `.zip` with `win-x64` in the name and extract it to `llm/windows/`
+- Linux: get the `.zip` with `ubuntu-x64` (or build it on your machine) and extract it to `llm/linux/`
 
-Alternativa mais simples: usar o **Ollama** (https://ollama.com), que já
-resolve a parte de servidor e download de modelo automaticamente — só que
-ele instala no sistema em vez de rodar 100% do pendrive. Bom para testar
-rápido antes de migrar pro modo "tudo no pendrive".
+A simpler alternative is **Ollama** (https://ollama.com), which handles the server
+and model download automatically - but it installs on the system instead of
+running 100% from the USB drive. Good for a quick test before moving to the
+"everything on the USB drive" mode.
 
-## 3. Baixar o modelo
+## 3. Download the model
 
-Recomendado para começar: **Llama 3 8B Instruct**, quantizado em `Q4_K_M`
-(bom equilíbrio entre qualidade e tamanho, ~4.5GB).
+Recommended to start with: **Llama 3 8B Instruct**, quantized as `Q4_K_M`
+(good balance between quality and size, ~4.5GB).
 
-Baixe de: https://huggingface.co/models (busque por "Llama-3-8B-Instruct-GGUF")
+Download it from https://huggingface.co/models (search for "Llama-3-8B-Instruct-GGUF")
+and save the `.gguf` file in `models/`.
 
-Salve o arquivo `.gguf` em `models/`.
+> Larger models (13B) fit comfortably on a 128GB drive, but run slower on PCs
+> without a dedicated GPU.
 
-> Modelos maiores (13B) cabem tranquilo nos seus 128GB, mas rodam mais devagar
-> em PCs sem GPU dedicada.
+## 4. Python on the USB drive (optional but recommended)
 
-## 4. Python no pendrive (opcional, mas recomendado)
+If the target PC has no Python installed, use a portable version:
 
-Se o PC de destino não tiver Python instalado, use uma versão portátil:
+- Windows: download the "embeddable zip" from https://www.python.org/downloads/windows/
+- Linux: usually preinstalled; otherwise a Python AppImage works
 
-- Windows: baixe o "embeddable zip" em https://www.python.org/downloads/windows/
-- Linux: geralmente já vem instalado; se não, um AppImage de Python resolve
+Then install the agent's only external dependency:
 
-Depois, instale a única dependência externa do agente:
 ```
-pip install psutil --target python/libs
+pip install -r requirements.txt --target python/libs
 ```
 
-## 5. Rodando
+## 5. Running
 
-**Passo 1 — subir o servidor LLM:**
+**Step 1 - start the LLM server:**
 
 Windows:
 ```
-llm\windows\llama-server.exe -m models\modelo.gguf -c 4096 --port 8080
+llm\windows\llama-server.exe -m models\model.gguf -c 4096 --port 8080
 ```
 
 Linux:
 ```
-./llm/linux/llama-server -m models/modelo.gguf -c 4096 --port 8080
+./llm/linux/llama-server -m models/model.gguf -c 4096 --port 8080
 ```
 
-**Passo 2 — rodar o agente (em outro terminal):**
+**Step 2 - run the agent (in another terminal):**
 ```
 python agent.py --host http://localhost:8080 --model local-model
 ```
 
-Se estiver usando Ollama em vez de llama.cpp:
+If you are using Ollama instead of llama.cpp:
 ```
 python agent.py --host http://localhost:11434 --model llama3
 ```
 
-## 6. Permissões
+The summary is written in English by default; use `--language "Portuguese"` (or any
+other language) to change it.
 
-Para ver *todos* os processos e conexões de rede (não só os do seu usuário),
-rode o agente com privilégios de administrador/root:
+## 6. Permissions
 
-- Windows: abra o terminal como Administrador
+To see *all* processes and network connections (not only your user's), run the
+agent with administrator/root privileges:
+
+- Windows: open the terminal as Administrator
 - Linux: `sudo python agent.py ...`
 
-## 7. Histórico de scans, diffs e whitelist
+## 7. Scan history, diffs and whitelist
 
-- Cada execução salva um snapshot em `scans/scan_<timestamp>.json`. A partir do
-  segundo scan, o agente compara automaticamente com o snapshot anterior e
-  destaca processos, conexões e itens de inicialização **novos** — isso é
-  bem mais útil do que reler a mesma lista enorme toda vez.
-- `whitelist.json` marca processos e itens de inicialização conhecidos como
-  normais (Windows, navegadores, Python, VS Code, etc). Edite esse arquivo
-  livremente para o seu ambiente — o modelo é instruído a não gastar tempo
-  comentando sobre itens marcados como `whitelisted: true`.
-- A pasta `scans/` não deve ir para o Git (dados do seu computador). Já está
-  no `.gitignore`.
+- Each run saves a snapshot to `scans/scan_<timestamp>.json`. From the second
+  scan on, the agent automatically compares with the previous snapshot and
+  highlights **new** processes, connections and startup items - far more useful
+  than re-reading the same huge list every time.
+- `whitelist.json` marks processes and startup items known to be normal
+  (Windows, browsers, Python, VS Code, etc). Edit it freely for your
+  environment - the model is told not to spend time commenting on items marked
+  `whitelisted: true`.
+- The `scans/` folder must not go to Git (data from your computer). It is
+  already in `.gitignore`.
 
-## 8. Limitações (importante)
+## 8. Development
 
-- O agente **não reconhece malware por assinatura** — ele não tem uma lista
-  de vírus conhecidos. Ele aponta o que *parece* fora do padrão, e pode errar
-  (falsos positivos/negativos).
-- Modelos pequenos (7B-13B) cometem mais erros de formatação nas chamadas de
-  função do que modelos grandes. Se o agente travar ou repetir passos, tente
-  reduzir `--steps` ou trocar para um modelo maior.
-- Isto é um protótipo/portfólio — para segurança real, continue usando um
-  antivírus de verdade (Defender, Malwarebytes, etc.) como camada principal.
+```
+pip install -r requirements-dev.txt
+ruff check . && ruff format --check .
+pytest
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for commit conventions.
+
+## 9. Limitations (important)
+
+- The agent **does not recognize malware by signature** - it has no list of
+  known viruses. It points out what *looks* out of the ordinary and can be wrong
+  (false positives/negatives).
+- Small models (7B-13B) make more formatting mistakes in function calls than
+  large models. If the analysis looks unreliable, try switching to a larger model.
+- This is a prototype/portfolio project - for real security, keep using a real
+  antivirus (Defender, Malwarebytes, etc.) as the main layer.
+
+## License
+
+[MIT](LICENSE)

@@ -1,4 +1,4 @@
-# Modelos e binários (pesados, cada um baixa/compila o seu)
+# Models and binaries (heavy, each user downloads/builds their own)
 models/*.gguf
 models/*.bin
 llm/windows/*
@@ -6,16 +6,20 @@ llm/linux/*
 !llm/windows/.gitkeep
 !llm/linux/.gitkeep
 
-# Histórico de scans — dados do computador de cada pessoa, não deve ser versionado
+# Scan history - data from each person's computer, must not be versioned
 scans/*.json
 
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
 
-# Python portátil (se usado)
+# Portable Python (if used)
 python/libs/
 
-# Diversos
+# Misc
 .DS_Store
 Thumbs.db
+venv/
+.vscode/
